@@ -163,7 +163,7 @@ def generate_image(cells: List[Cell], out_path: Path) -> Image.Image:
     img = _make_background(W, H)
     draw = ImageDraw.Draw(img, "RGBA")
     for c in cells:
-        data_str = f"{c.id}-{c,x}-{c.y}-{c.cell_type}"
+        data_str = f"{c.id}-{c.x}-{c.y}-{c.cell_type}"
         seed = zlib.adler32(data_str.encode())
        # seed = hash((c.id, c.x, c.y, c.cell_type)) & 0xFFFFFFFF
         _draw_cell(draw, c.x, c.y, c.cell_type, seed)
@@ -287,11 +287,44 @@ class SpatialNetwork:
         for c in self.cells:
             self.adjacency[c.id] = []
         t0 = time.perf_counter()
+        #construção da grelha
         grid: Dict[Tuple[int, int], List[Cell]] = defaultdict(list)
         for cell in self.cells:
             gx = int(cell.x / threshold)
             gy = int(cell.y / threshold)
             grid[(gx, gy)].append(cell)
+         #Evita duplicados (A-B/B-A)
+        seen_edges = set()
+
+        for cell in self.cells:
+            gx = int(cell.x / threshold)
+            gy = int(cell.y / threshold)
+
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    nearby = grid.get((gx + dx, gy + dy),[])
+                    for other in nearby:
+                        #Ignorar própria celula
+                        if cell.id == other.id:
+                            continue
+                        #sorted evita A-B e B-A, cria-se chave única
+                        edge_key = tuple(sorted((cell.id, other.id)))
+
+                        if edge_key not in seen_edges:
+                            dist = math.hypot(cell.x - other.x, cell.y - other.y)
+
+                            local_threshold = threshold
+                            if cell.cell_type != other.cell_type:
+                                local_threshold *= 0.75
+
+                            #Adiciona ligação aos nós
+                            if dist < local_threshold:
+                                self.adjacency[cell.id].append((other.id, dist))
+                                self.adjacency[other.id].append((cell.id, dist))
+                                seen_edges.add(edge_key)
+
+        return time.perf_counter() - t0
+
         temp_neighbors: Dict[str, List[Tuple[str, float]]] = defaultdict(list)
         for cell in self.cells:
             gx = int(cell.x / threshold)
