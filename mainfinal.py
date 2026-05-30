@@ -45,7 +45,7 @@ TYPE_STYLE: Dict[str, Dict] = {
 }
 
 # ══════════════════════════════════════════════════════════════════
-# PARTE 1 — MODELO DE DADOS
+# MODELO DE DADOS
 # ══════════════════════════════════════════════════════════════════
 
 class Cell:
@@ -80,7 +80,7 @@ class Cell:
 
 
 # ══════════════════════════════════════════════════════════════════
-# PARTE 2 — LEITURA DO CSV
+# LEITURA DO CSV
 # ══════════════════════════════════════════════════════════════════
    #Abrir .CSV (clause guard)
 def iter_csv(
@@ -134,7 +134,7 @@ def load_cells(csv_path: Path) -> List[Cell]:
 
 
 # ══════════════════════════════════════════════════════════════════
-# PARTE 3 — GERAÇÃO DA IMAGEM SINTÉTICA
+# GERAÇÃO DA IMAGEM SINTÉTICA
 # ══════════════════════════════════════════════════════════════════
 
 def _make_background(w: int, h: int) -> Image.Image:
@@ -183,7 +183,7 @@ def generate_image(cells: List[Cell], out_path: Path) -> Image.Image:
 
 
 # ══════════════════════════════════════════════════════════════════
-# PARTE 4 — EXTRAÇÃO DE MÉTRICAS MORFOLÓGICAS
+# EXTRAÇÃO DE MÉTRICAS MORFOLÓGICAS
 # ══════════════════════════════════════════════════════════════════
 
 def extract_metrics(cells: List[Cell], img: Image.Image, window: int = WINDOW_SIZE) -> None:
@@ -253,7 +253,7 @@ def extract_metrics(cells: List[Cell], img: Image.Image, window: int = WINDOW_SI
 
 
 # ══════════════════════════════════════════════════════════════════
-# PARTE 5 — CONSTRUÇÃO DA REDE ESPACIAL
+# CONSTRUÇÃO DA REDE ESPACIAL
 # ══════════════════════════════════════════════════════════════════
  #calcular automaticamente a distância ideal para ligar as células na rede espacial
 def estimate_threshold(cells: List[Cell], sample_size: int = 500) -> float:
@@ -281,6 +281,7 @@ class SpatialNetwork:
     def __init__(self, cells: List[Cell]) -> None:
         self.cells = cells
         self.adjacency: Dict[str, List[Tuple[str, float]]] = {c.id: [] for c in cells}
+        
     #Resolve o problema comparando todas com todas
     def build_naive(self, threshold: float) -> float:
         for c in self.cells:
@@ -295,6 +296,7 @@ class SpatialNetwork:
                     self.adjacency[a.id].append((b.id, dist))
                     self.adjacency[b.id].append((a.id, dist))
         return time.perf_counter() - t0
+    
     #Utiliza Grid no processo brutalmente +Rapido +Eficiente
     def build_optimized(self, threshold: float) -> float:
         for c in self.cells:
@@ -413,10 +415,10 @@ class SpatialNetwork:
 
 
 # ══════════════════════════════════════════════════════════════════
-# PARTE 6 — ANÁLISES ADICIONAIS
+# ANÁLISES ADICIONAIS
 # ══════════════════════════════════════════════════════════════════
 
-# ── 6. Densidade celular ──────────────────────────────────────────
+# ──  Densidade celular ──────────────────────────────────────────
 def compute_density(cells: List[Cell], image_size: Tuple[int, int]) -> Dict[str, float]:
     """
     Densidade = número de células / área total da imagem em Mpx².
@@ -434,7 +436,7 @@ def compute_density(cells: List[Cell], image_size: Tuple[int, int]) -> Dict[str,
     }
 
 
-# ── 6. Estatísticas completas do grau da rede ────────────────────    Responsavel por calcular a distribuição estatística das conexões em toda a rede celular
+# ──  Estatísticas completas do grau da rede ────────────────────    Responsavel por calcular a distribuição estatística das conexões em toda a rede celular
 def compute_degree_stats(cells: List[Cell], network: "SpatialNetwork") -> Dict[str, float]:
     degrees = [network.degree(c.id) for c in cells]
     arr = np.array(degrees, dtype=np.float64)
@@ -450,7 +452,7 @@ def compute_degree_stats(cells: List[Cell], network: "SpatialNetwork") -> Dict[s
     }
 
 
-# ── 6. Hubs pelo critério média + 2×std ─────────────────────────
+# ──  Hubs pelo critério média + 2×std ─────────────────────────
 def find_hubs_statistical(
     cells: List[Cell],
     network: "SpatialNetwork",
@@ -466,7 +468,7 @@ def find_hubs_statistical(
     return sorted(hubs, key=lambda x: x[1], reverse=True)
 
 
-# ── 6. Estatísticas completas de clusters ────────────────────────
+# ──  Estatísticas completas de clusters ────────────────────────
 def compute_cluster_stats(clusters: List[List[str]]) -> Dict[str, float]:
     sizes = [len(cl) for cl in clusters]
     arr = np.array(sizes, dtype=np.float64)
@@ -483,7 +485,7 @@ def compute_cluster_stats(clusters: List[List[str]]) -> Dict[str, float]:
     }
 
 
-# ── 6. Distância entre células ligadas ───────────────────────────
+# ──  Distância entre células ligadas ───────────────────────────
 def compute_edge_distance_stats(network: "SpatialNetwork") -> Dict[str, float]:
     dists = network.all_edge_distances()
     if not dists:
@@ -501,7 +503,7 @@ def compute_edge_distance_stats(network: "SpatialNetwork") -> Dict[str, float]:
     }
 
 
-# ── 6. Comparação por tipo celular ──────────────────────────────
+# ──  Comparação por tipo celular ──────────────────────────────
 def compute_type_comparison(
     cells: List[Cell],
     network: "SpatialNetwork",
@@ -542,7 +544,7 @@ def compute_type_comparison(
 
 
 # ══════════════════════════════════════════════════════════════════
-# PARTE 7 — RELATÓRIO NO TERMINAL 
+# RELATÓRIO NO TERMINAL  
 # ══════════════════════════════════════════════════════════════════
 def estimate_memory_saving(n_cells: int) -> Dict[str, float]:
     """
@@ -592,7 +594,7 @@ def print_report(
     print(f"  Threshold (px)   : {threshold:.2f}")
     print(f"  Total de células : {len(cells)}")
 
-    # ── 1. Métricas morfológicas por célula ───────────────────────
+    # ──  Métricas morfológicas por célula ───────────────────────
     print(f"\n{thin}")
     print("   MÉTRICAS MORFOLÓGICAS POR CÉLULA")
     print(thin)
@@ -616,7 +618,7 @@ def print_report(
               f"  {np.mean(p25s):7.2f}"
               f"  {np.mean(p75s):7.2f}")
 
-    # ── 2. Área aproximada ────────────────────────────────────────
+    # ──  Área aproximada ────────────────────────────────────────
     print(f"\n{thin}")
     print("   ÁREA APROXIMADA")
     print(thin)
@@ -630,7 +632,7 @@ def print_report(
         print(f"  Mín/Máx  : {np.min(arr):.0f} / {np.max(arr):.0f} px²")
         print(f"  P25/P75  : {p25_a:.1f} / {p75_a:.1f} px²")
 
-    # ── 3. Circularidade ──────────────────────────────────────────
+    # ──  Circularidade ──────────────────────────────────────────
     print(f"\n{thin}")
     print("   CIRCULARIDADE")
     print(thin)
@@ -641,7 +643,7 @@ def print_report(
         print(f"  Mediana  : {np.median(arr):.4f}")
         print(f"  Std      : {np.std(arr):.4f}")
 
-    # ── 4. Contagem por tipo celular ──────────────────────────────
+    # ──  Contagem por tipo celular ──────────────────────────────
     print(f"\n{thin}")
     print("   CONTAGEM POR TIPO CELULAR")
     print(thin)
@@ -649,7 +651,7 @@ def print_report(
         pct = count / len(cells) * 100
         print(f"  {ctype:<18}: {count:>5}  ({pct:5.1f}%)  ")
 
-    # ── 5. Densidade celular ──────────────────────────────────────
+    # ──  Densidade celular ──────────────────────────────────────
     print(f"\n{thin}")
     print("   DENSIDADE CELULAR")
     print(thin)
@@ -657,7 +659,7 @@ def print_report(
     print(f"  Área total : {density_stats['area_Mpx2']:.2f} Mpx² (~ {density_stats['area_Mpx2']:.2f} x 10e6 cells)")
     print(f"  Densidade  : {density_stats['density_per_Mpx2']:.1f} células / Mpx²")
 
-    # ── 6. Grau da rede ────────────────────────────────────────────
+    # ──  Grau da rede ────────────────────────────────────────────
     print(f"\n{thin}")
     print("   GRAU DA REDE")
     print(thin)
@@ -691,7 +693,7 @@ def print_report(
     print(f"  Maior cluster    : {cs['max_size']} células")
     print(f"  Isoladas : {cs['n_isolated']}")
 
-    # Top 3 clusters
+    # Top 3 clusters com composição por tipo
     for i, cl in enumerate(clusters[:3], 1):
         comp: Dict[str, int] = defaultdict(int)
         for cid in cl:
@@ -768,7 +770,7 @@ def print_report(
 
 
 # ══════════════════════════════════════════════════════════════════
-# PARTE 8 — CLIENT E PONTO DE ENTRADA
+#  CLIENT E PONTO DE ENTRADA
 # ══════════════════════════════════════════════════════════════════
 
 def parse_args() -> argparse.Namespace:
