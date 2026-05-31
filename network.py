@@ -1,40 +1,34 @@
 import math
 import random
 import time
+import numpy as np
 from collections import defaultdict, deque
 from typing import Dict, List, Tuple
-
-from .models import Cell
-
+from models import Cell
 
 def estimate_threshold(cells: List[Cell], sample_size: int = 500) -> float:
     if len(cells) < 2:
         return 20.0
     rng = random.Random(42)
     sample = rng.sample(cells, min(sample_size, len(cells)))
-    nearest_distances = []
-    for cell in sample:
-        best = float("inf")
-        for other in cells:
-            if cell.id == other.id:
-                continue
-            d = math.hypot(cell.x - other.x, cell.y - other.y)
-            if d < best:
-                best = d
-        nearest_distances.append(best)
-    import numpy as np
-    mean_nn = np.mean(nearest_distances)
-    threshold = mean_nn * 1.8
-    threshold = max(12, threshold)
-    threshold = min(35, threshold)
-    return float(threshold)
 
+    all_xy = np.array([[c.x, c.y] for c in cells], dtype=np.float32)
+    nearest_distances = []
+
+    for cell in sample:
+        diff = all_xy - np.array([cell.x, cell.y], dtype=np.float32)
+        dists = np.hypot(diff[:, 0], diff[:, 1])
+        dists[dists == 0] = np.inf
+        nearest_distances.append(float(np.min(dists)))
+
+    mean_nn = np.mean(nearest_distances)
+    return float(np.clip(mean_nn * 1.8, 12, 35))
 
 class SpatialNetwork:
     def __init__(self, cells: List[Cell]) -> None:
         self.cells = cells
         self.adjacency: Dict[str, List[Tuple[str, float]]] = {c.id: [] for c in cells}
-
+        
     def build_naive(self, threshold: float) -> float:
         for c in self.cells:
             self.adjacency[c.id] = []
@@ -48,7 +42,7 @@ class SpatialNetwork:
                     self.adjacency[a.id].append((b.id, dist))
                     self.adjacency[b.id].append((a.id, dist))
         return time.perf_counter() - t0
-
+    
     def build_optimized(self, threshold: float) -> float:
         for c in self.cells:
             self.adjacency[c.id] = []
@@ -58,27 +52,33 @@ class SpatialNetwork:
             gx = int(cell.x / threshold)
             gy = int(cell.y / threshold)
             grid[(gx, gy)].append(cell)
-        temp_neighbors: Dict[str, List[Tuple[str, float]]] = defaultdict(list)
+         
+        seen_edges = set()
         for cell in self.cells:
             gx = int(cell.x / threshold)
             gy = int(cell.y / threshold)
+
             for dx in (-1, 0, 1):
                 for dy in (-1, 0, 1):
                     nearby = grid.get((gx + dx, gy + dy), [])
                     for other in nearby:
                         if cell.id == other.id:
                             continue
-                        dist = math.hypot(cell.x - other.x, cell.y - other.y)
-                        local_threshold = threshold
-                        if cell.cell_type != other.cell_type:
-                            local_threshold *= 0.75
-                        if dist <= local_threshold:
-                            temp_neighbors[cell.id].append((other.id, dist))
-        MAX_NEIGHBORS = 12
-        for cid, neighbors in temp_neighbors.items():
-            neighbors.sort(key=lambda x: x[1])
-            for nid, dist in neighbors[:MAX_NEIGHBORS]:
-                self.adjacency[cid].append((nid, dist))
+                        edge_key = tuple(sorted((cell.id, other.id)))
+
+                        if edge_key not in seen_edges:
+                            dist = math.hypot(cell.x - other.x, cell.y - other.y)
+                            local_threshold = threshold
+                            if cell.cell_type != other.cell_type:
+                                local_threshold *= 0.75
+
+                            if dist < local_threshold:
+                                self.adjacency[cell.id].append((other.id, dist))
+                                self.adjacency[other.id].append((cell.id, dist))
+                                seen_edges.add(edge_key)
+
+        for cid in self.adjacency:
+            self.adjacency[cid] = tuple(self.adjacency[cid])
         return time.perf_counter() - t0
 
     def degree(self, cell_id: str) -> int:
@@ -111,7 +111,6 @@ class SpatialNetwork:
         return sum(len(v) for v in self.adjacency.values()) // 2
 
     def all_edge_distances(self) -> List[float]:
-        """Devolve lista de distâncias de todas as arestas (sem duplicados)."""
         seen: set = set()
         dists: List[float] = []
         for cid, neighbors in self.adjacency.items():
