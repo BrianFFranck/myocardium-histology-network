@@ -1,8 +1,6 @@
-from typing import Dict
-
 WINDOW_SIZE = 64
 
-TYPE_STYLE: Dict[str, Dict] = {
+TYPE_STYLE = {
     "cardiomyocyte": {
         "fill": (222, 128, 54), "fill_alpha": 180,
         "nucleus": (95, 35, 60), "nucleus_alpha": 255,
