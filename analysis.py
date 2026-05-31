@@ -1,122 +1,59 @@
-from collections import defaultdict
-from typing import Dict, List, Tuple
-
+import math
 import numpy as np
+from typing import List
+from PIL import Image
+from models import Cell
+from constants import WINDOW_SIZE
 
-from .models import Cell
-from .network import SpatialNetwork
+def extract_metrics(cells: List[Cell], img: Image.Image, window: int = WINDOW_SIZE) -> None:
+    gray = np.array(img.convert("L"), dtype=np.float32)
+    h_img, w_img = gray.shape
+    half = window // 2
 
+    for cell in cells:
+        x0, y0 = max(0, cell.x - half), max(0, cell.y - half)
+        x1, y1 = min(w_img, cell.x + half), min(h_img, cell.y + half)
+        patch = gray[y0:y1, x0:x1]
 
-def compute_density(cells: List[Cell], image_size: Tuple[int, int]) -> Dict[str, float]:
-    """Densidade = número de células / área total da imagem (em Mpx²)."""
-    W, H = image_size
-    area_px2 = W * H
-    density = len(cells) / (area_px2 / 1_000_000)
-    return {
-        "n_cells":            len(cells),
-        "image_width":        W,
-        "image_height":       H,
-        "area_Mpx2":          area_px2 / 1_000_000,
-        "density_per_Mpx2":   density,
-    }
+        if patch.size == 0:
+            cell.mean_intensity = cell.median_intensity = 0.0
+            cell.std_intensity  = cell.min_intensity    = 0.0
+            cell.max_intensity  = cell.p25_intensity    = 0.0
+            cell.p75_intensity  = 0.0
+            cell.approx_area    = 0
+            cell.circularity    = 0.0
+            continue
 
+        flat = patch.ravel()
+        cell.mean_intensity   = float(np.mean(flat))
+        cell.median_intensity = float(np.median(flat))
+        cell.std_intensity    = float(np.std(flat))
+        cell.min_intensity    = float(np.min(flat))
+        cell.max_intensity    = float(np.max(flat))
+        
+        n_flat = len(flat)
+        idx25 = max(0, int(n_flat * 0.25) - 1)
+        idx75 = max(0, int(n_flat * 0.75) - 1)
+        partitioned = np.partition(flat, [idx25, idx75])
+        cell.p25_intensity = float(partitioned[idx25])
+        cell.p75_intensity = float(partitioned[idx75])
 
-def compute_degree_stats(cells: List[Cell], network: SpatialNetwork) -> Dict[str, float]:
-    degrees = [network.degree(c.id) for c in cells]
-    arr = np.array(degrees, dtype=np.float64)
-    return {
-        "mean":   float(np.mean(arr)),
-        "median": float(np.median(arr)),
-        "std":    float(np.std(arr)),
-        "min":    float(np.min(arr)),
-        "max":    float(np.max(arr)),
-        "p25":    float(np.percentile(arr, 25)),
-        "p75":    float(np.percentile(arr, 75)),
-    }
+        thresh = cell.mean_intensity
+        binary = (patch < thresh).astype(np.uint8)
+        cell.approx_area = int(np.sum(binary))
 
-
-def find_hubs_statistical(
-    cells: List[Cell],
-    network: SpatialNetwork,
-    deg_stats: Dict[str, float],
-) -> List[Tuple[str, int]]:
-    """Retorna células com grau > média + 2×std."""
-    threshold = deg_stats["mean"] + 2 * deg_stats["std"]
-    hubs = [
-        (c.id, network.degree(c.id))
-        for c in cells
-        if network.degree(c.id) > threshold
-    ]
-    return sorted(hubs, key=lambda x: x[1], reverse=True)
-
-
-def compute_cluster_stats(clusters: List[List[str]]) -> Dict[str, float]:
-    sizes = [len(cl) for cl in clusters]
-    arr = np.array(sizes, dtype=np.float64)
-    size_dist: Dict[int, int] = defaultdict(int)
-    for s in sizes:
-        size_dist[s] += 1
-    return {
-        "n_clusters":   len(clusters),
-        "mean_size":    float(np.mean(arr)),
-        "median_size":  float(np.median(arr)),
-        "std_size":     float(np.std(arr)),
-        "max_size":     int(np.max(arr)),
-        "min_size":     int(np.min(arr)),
-        "n_isolated":   int(size_dist.get(1, 0)),
-        "size_dist":    dict(sorted(size_dist.items())),
-    }
-
-
-def compute_edge_distance_stats(network: SpatialNetwork) -> Dict[str, float]:
-    dists = network.all_edge_distances()
-    if not dists:
-        return {"n_edges": 0, "mean": 0.0, "median": 0.0, "std": 0.0,
-                "min": 0.0, "max": 0.0, "p25": 0.0, "p75": 0.0}
-    arr = np.array(dists, dtype=np.float64)
-    return {
-        "n_edges": len(dists),
-        "mean":    float(np.mean(arr)),
-        "median":  float(np.median(arr)),
-        "std":     float(np.std(arr)),
-        "min":     float(np.min(arr)),
-        "max":     float(np.max(arr)),
-        "p25":     float(np.percentile(arr, 25)),
-        "p75":     float(np.percentile(arr, 75)),
-    }
-
-
-def compute_type_comparison(
-    cells: List[Cell],
-    network: SpatialNetwork,
-) -> Dict[str, Dict[str, float]]:
-    """Para cada tipo celular calcula: mean/std de intensity, area, circularity e grau da rede."""
-    buckets: Dict[str, List[Cell]] = defaultdict(list)
-    for c in cells:
-        buckets[c.cell_type].append(c)
-
-    def _stats(lst: list) -> Tuple[float, float]:
-        a = np.array(lst, dtype=np.float64)
-        return (float(np.mean(a)) if len(a) else 0.0,
-                float(np.std(a))  if len(a) else 0.0)
-
-    result: Dict[str, Dict[str, float]] = {}
-    for ctype, group in sorted(buckets.items()):
-        intensities   = [c.mean_intensity for c in group if c.mean_intensity  is not None]
-        areas         = [c.approx_area    for c in group if c.approx_area     is not None]
-        circularities = [c.circularity    for c in group if c.circularity     is not None]
-        degrees       = [network.degree(c.id) for c in group]
-
-        i_m, i_s = _stats(intensities)
-        a_m, a_s = _stats(areas)
-        c_m, c_s = _stats(circularities)
-        d_m, d_s = _stats(degrees)
-
-        result[ctype] = {
-            "n":                len(group),
-            "intensity_mean":   i_m, "intensity_std":  i_s,
-            "area_mean":        a_m, "area_std":        a_s,
-            "circularity_mean": c_m, "circularity_std": c_s,
-            "degree_mean":      d_m, "degree_std":      d_s,
-        }
-    return result
+        area = cell.approx_area
+        if area > 0 and binary.shape[0] > 2 and binary.shape[1] > 2:
+            eroded = (
+                binary[1:-1, 1:-1] &
+                binary[:-2, 1:-1] &
+                binary[2:, 1:-1] &
+                binary[1:-1, :-2] &
+                binary[1:-1, 2:]
+            )
+            diff = np.clip(binary[1:-1, 1:-1].astype(np.int16) - eroded.astype(np.int16), 0, 1)
+            perimeter = int(np.sum(diff))
+            cell.circularity = (4 * math.pi * area / perimeter ** 2) if perimeter > 0 else 0.0
+        else:
+            perimeter = int(np.sum(binary))
+            cell.circularity = (4 * math.pi * area / perimeter ** 2) if perimeter > 0 else 0.0
