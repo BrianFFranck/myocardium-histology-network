@@ -1,16 +1,10 @@
 import csv
 from pathlib import Path
 from typing import Any, Dict, Generator, List
+from constants import TYPE_STYLE
+from models import Cell
 
-from .constants import TYPE_STYLE
-from .models import Cell
-
-
-def iter_csv(
-    csv_path: Path,
-    required_columns: List[str],
-    encoding: str = "utf-8",
-) -> Generator[Dict[str, Any], None, None]:
+def iter_csv(csv_path: Path, required_columns: List[str], encoding: str = "utf-8") -> Generator[Dict[str, Any], None, None]:
     if not csv_path.is_file():
         raise FileNotFoundError(f"CSV não encontrado: {csv_path.resolve()}")
     with csv_path.open("r", encoding=encoding, newline="") as f:
@@ -37,15 +31,14 @@ def iter_csv(
             except (ValueError, IndexError):
                 continue
 
-
 def load_cells(csv_path: Path) -> List[Cell]:
     cells: List[Cell] = []
     required = ["cell_id", "x", "y", "cell_type"]
-    valid_types = set(TYPE_STYLE.keys())
+    VALID_TYPES = set(TYPE_STYLE.keys())
 
     for data in iter_csv(csv_path, required):
         ctype = data["cell_type"].lower().strip()
-        if ctype in valid_types:
+        if ctype in VALID_TYPES:
             cells.append(Cell(
                 cell_id=data["cell_id"],
                 x=int(float(data["x"])),
